@@ -49,6 +49,13 @@ def test_multiple_exceptions():
     assert db_records[0][0] == 'active'
 ```
 
+XFAIL message format:
+
+```
+XFAIL The test is skipped because of open bugs:
+https://company.atlassian.net/browse/MP-123
+```
+
 ## 4. [Optional] Set custom resolved statuses
 
 By default, only issues with the status "Done" and "Closed" are considered resolved.
