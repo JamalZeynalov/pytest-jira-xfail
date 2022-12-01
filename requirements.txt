@@ -4,3 +4,4 @@ setuptools>=65.5.1
 jira>=3.4.1
 singleton-decorator>=1.0.0
 allure-pytest>=2.11.1
+selenium>=4.6.0

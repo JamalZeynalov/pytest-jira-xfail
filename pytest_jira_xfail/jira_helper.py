@@ -2,6 +2,8 @@ import pytest
 from _pytest.mark import Mark
 from jira import JIRA
 from singleton_decorator import singleton
+from selenium.common.exceptions import *
+from requests import *
 
 
 @singleton
