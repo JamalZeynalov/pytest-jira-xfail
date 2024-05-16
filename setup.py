@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pytest-jira-xfail",
-    version="1.0.3",
+    version="1.0.4",
     author="Jamal Zeinalov",
     author_email="jamal.zeynalov@gmail.com",
     description='Plugin skips (xfail) tests if unresolved Jira issue(s) linked',
@@ -27,6 +27,7 @@ setup(
         "allure-pytest>=2.11.1",
         "selenium>=4.6.0",
         "pytest-playwright>=0.3.3",
+        "playwright~=1.43.0",
     ],
     python_requires=">=3.9",
 )

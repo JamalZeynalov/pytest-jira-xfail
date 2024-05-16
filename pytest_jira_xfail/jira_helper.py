@@ -4,7 +4,10 @@ from jira import JIRA
 from singleton_decorator import singleton
 from selenium.common.exceptions import *
 from requests import *
-from playwright._impl._api_types import *
+try:
+    from playwright._impl._api_types import *
+except ImportError:
+    from playwright.sync_api import *
 
 
 @singleton

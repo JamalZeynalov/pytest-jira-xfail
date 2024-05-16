@@ -6,3 +6,4 @@ singleton-decorator>=1.0.0
 allure-pytest>=2.11.1
 selenium>=4.6.0
 pytest-playwright>=0.3.3
+playwright~=1.43.0
