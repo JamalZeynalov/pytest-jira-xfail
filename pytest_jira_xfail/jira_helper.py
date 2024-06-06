@@ -1,9 +1,12 @@
+from typing import List
+
 import pytest
 from _pytest.mark import Mark
 from jira import JIRA
-from singleton_decorator import singleton
-from selenium.common.exceptions import *
 from requests import *
+from selenium.common.exceptions import *
+from singleton_decorator import singleton
+
 try:
     from playwright._impl._api_types import *
 except ImportError:
@@ -100,11 +103,36 @@ class PytestJiraHelper:
 
             if open_issues:
                 links = "\n".join(self._get_issue_link(x) for x in open_issues)
-                xfail_message = f"The test is skipped because of open issues:\n{links}\n"
+                xfail_message = (
+                    f"The test is skipped because of open issues:\n{links}\n"
+                )
 
                 mark = pytest.mark.xfail(reason=xfail_message, raises=exceptions)
                 item.add_marker(mark)
                 item.add_marker(pytest.mark.issue)
+
+    @staticmethod
+    def get_all_linked_issues(items) -> List[str]:
+        """Get keys of all Jira issues linked to tests  selected to run (as @bug or @issue)
+
+        Parameters
+        ----------
+        :param items: Current PyTest session items (tests)
+        """
+        all_linked_issues = set()
+        for item in items:
+            bugs_labels = list(
+                filter(lambda x: x.kwargs.get("label_type") == "bug", item.own_markers)
+            )
+            issues_labels = list(
+                filter(
+                    lambda x: x.kwargs.get("label_type") == "issue", item.own_markers
+                )
+            )
+            issues_keys = [x.args[0] for x in bugs_labels + issues_labels]
+            all_linked_issues.update(issues_keys)
+
+        return list(all_linked_issues)
 
 
 def _add_allure_issue_labels(item):
