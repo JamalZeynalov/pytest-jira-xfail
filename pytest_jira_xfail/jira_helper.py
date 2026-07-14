@@ -94,12 +94,17 @@ class PytestJiraHelper:
         """
 
         for item in items:
-            linked_issues_keys = _add_allure_issue_labels(item)
+            _add_allure_issue_labels(item)
             exceptions: tuple = _get_expected_exception(item)
             open_issues = []
-            for key in linked_issues_keys:
+            # The test is executed unless at least one open bug is marked run=False.
+            run = True
+            for mark in _get_bug_markers(item):
+                key = mark.args[0]
                 if self._check_if_issue_open(key):
                     open_issues.append(key)
+                    if not mark.kwargs.get("run", True):
+                        run = False
 
             if open_issues:
                 links = "\n".join(self._get_issue_link(x) for x in open_issues)
@@ -107,7 +112,9 @@ class PytestJiraHelper:
                     f"The test is skipped because of open issues:\n{links}\n"
                 )
 
-                mark = pytest.mark.xfail(reason=xfail_message, raises=exceptions)
+                mark = pytest.mark.xfail(
+                    reason=xfail_message, raises=exceptions, run=run
+                )
                 item.add_marker(mark)
                 item.add_marker(pytest.mark.issue)
 
@@ -121,9 +128,7 @@ class PytestJiraHelper:
         """
         all_linked_issues = set()
         for item in items:
-            bugs_labels = list(
-                filter(lambda x: x.kwargs.get("label_type") == "bug", item.own_markers)
-            )
+            bugs_labels = _get_bug_markers(item)
             issues_labels = list(
                 filter(
                     lambda x: x.kwargs.get("label_type") == "issue", item.own_markers
@@ -135,11 +140,16 @@ class PytestJiraHelper:
         return list(all_linked_issues)
 
 
-def _add_allure_issue_labels(item):
-    """Add 'issue' label to the Allure report"""
-    issues_labels = list(
+def _get_bug_markers(item):
+    """Get all @bug markers attached to the current test"""
+    return list(
         filter(lambda x: x.kwargs.get("label_type") == "bug", item.own_markers)
     )
+
+
+def _add_allure_issue_labels(item):
+    """Add 'issue' label to the Allure report"""
+    issues_labels = _get_bug_markers(item)
     issues_keys = [x.args[0] for x in issues_labels]
     for issue_key in issues_keys:
         item.own_markers.append(
@@ -151,7 +161,5 @@ def _add_allure_issue_labels(item):
 
 def _get_expected_exception(item):
     """Get the expected exception type attached to the current test"""
-    issues_labels = list(
-        filter(lambda x: x.kwargs.get("label_type") == "bug", item.own_markers)
-    )
+    issues_labels = _get_bug_markers(item)
     return tuple(eval(x.args[1]) for x in issues_labels)
