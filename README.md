@@ -49,6 +49,25 @@ def test_multiple_exceptions():
     assert db_records[0][0] == 'active'
 ```
 
+### Skip the test entirely (never run it)
+
+By default a test linked to an open bug is still executed and reported as `XFAIL`
+(so an unexpected pass shows up as `XPASS`). If the bug makes the test unsafe or
+pointless to run (e.g. it hangs, corrupts data, or blocks the suite), pass
+`run=False` to skip execution completely while the issue is open. The test is
+reported as `XFAIL [NOTRUN]` and its body is never executed:
+
+```python
+from pytest_jira_xfail.annotations import bug
+
+
+@bug("MP-123", run=False)
+def test_not_executed_until_fixed():
+    assert False  # never runs while MP-123 is open
+```
+
+Once the linked issue is resolved, the test runs normally again.
+
 XFAIL message format:
 
 ```

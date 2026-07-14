@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pytest-jira-xfail",
-    version="1.2.1",
+    version="1.3.0",
     author="Jamal Zeinalov",
     author_email="jamal.zeynalov@gmail.com",
     description="Plugin skips (xfail) tests if unresolved Jira issue(s) linked",
