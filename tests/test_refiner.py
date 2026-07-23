@@ -12,8 +12,11 @@ from types import SimpleNamespace
 from _pytest.skipping import xfailed_key
 from _pytest.stash import Stash
 
+import pytest_jira_xfail.xfail_plugin as xp
 from pytest_jira_xfail.xfail_plugin import (
     MATCHERS_ATTR,
+    _matcher_accepts_soft,
+    _soft_failures_all_expected,
     _veto_xfail_if_error_unexpected,
 )
 
@@ -207,3 +210,86 @@ def test_error_contains_non_matching_param_cancels_xfail():
     )
 
     assert not _xfail_kept(item)
+
+
+# --------------------------------------------------------------------------- #
+# Soft-assertion (pytest-check) failures: error_contains enforced on the       #
+# collected failure messages (call.excinfo is None for soft failures).         #
+# --------------------------------------------------------------------------- #
+
+
+def test_soft_matcher_type_only_assertion_accepts_any_message():
+    assert _matcher_accepts_soft((AssertionError, None, True), "whatever") is True
+
+
+def test_soft_matcher_non_assertion_type_is_rejected():
+    # Soft failures are AssertionError based; a KeyError matcher cannot apply.
+    assert _matcher_accepts_soft((KeyError, None, True), "whatever") is False
+
+
+def test_soft_matcher_substring_match_and_case():
+    assert _matcher_accepts_soft((AssertionError, ["foo"], True), "a foo b") is True
+    assert _matcher_accepts_soft((AssertionError, ["foo"], True), "a bar b") is False
+    assert _matcher_accepts_soft((AssertionError, ["FOO"], False), "a foo b") is True
+
+
+def test_soft_all_expected_true_when_every_failure_matches():
+    matchers = [(AssertionError, ["foo"], True)]
+    assert _soft_failures_all_expected(["x foo", "y foo too"], matchers) is True
+
+
+def test_soft_all_expected_false_when_any_failure_unexpected():
+    matchers = [(AssertionError, ["foo"], True)]
+    assert _soft_failures_all_expected(["x foo", "y bar"], matchers) is False
+
+
+def test_veto_soft_failure_matching_keeps_xfail(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for buildingCeilingHeight"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))  # soft: no call-phase exc
+
+    assert _xfail_kept(item)
+
+
+def test_veto_soft_failure_not_matching_cancels_xfail(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for tenantName"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert not _xfail_kept(item)
+
+
+def test_veto_soft_failure_mixed_expected_and_unexpected_cancels(monkeypatch):
+    # One failure matches the bug, another is unrelated -> surface a real failure.
+    monkeypatch.setattr(
+        xp,
+        "_collect_soft_failures",
+        lambda: ["diff buildingCeilingHeight", "diff tenantName"],
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert not _xfail_kept(item)
+
+
+def test_veto_type_only_bug_keeps_xfail_for_soft_failure(monkeypatch):
+    # A bare @bug (no error_contains) keeps the deterministic XFAIL for any soft
+    # assertion, exactly as before.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: ["any soft failure"])
+    item = _item([(AssertionError, None, True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert _xfail_kept(item)
+
+
+def test_veto_no_soft_failures_keeps_xfail_for_xpass(monkeypatch):
+    # The test actually passed (no soft failures) -> XPASS; xfail must be retained.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: [])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert _xfail_kept(item)

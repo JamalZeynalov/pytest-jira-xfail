@@ -62,9 +62,9 @@ def _ensure_package_importable(monkeypatch):
     )
 
 
-def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
+def _allure_statuses(pytester, test_body):
     pytester.makeconftest(_CONFTEST)
-    pytester.makepyfile(_TEST)
+    pytester.makepyfile(test_body)
 
     # Subprocess for a clean, single soft-assertion scope; allure enabled.
     pytester.runpytest_subprocess(
@@ -75,6 +75,11 @@ def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
     for result_file in (pytester.path / "allure-results").glob("*-result.json"):
         data = json.loads(result_file.read_text())
         statuses[data["name"]] = data["status"]
+    return statuses
+
+
+def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
+    statuses = _allure_statuses(pytester, _TEST)
 
     assert statuses == {
         # message contains "buildingCeilingHeight" -> expected bug -> XFAIL
@@ -82,3 +87,22 @@ def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
         # message contains neither substring -> different problem -> real failure
         "test_plugin[nothing to raise]": "failed",
     }
+
+
+def test_allure_status_is_passed_for_xpass(pytester):
+    # A test linked to an open bug that unexpectedly passes is an XPASS. Allure
+    # records XPASS as status "passed" (with an XPASS message), so it must not be
+    # reported as skipped/failed.
+    statuses = _allure_statuses(
+        pytester,
+        """
+from pytest_jira_xfail.annotations import bug
+
+
+@bug("AP-24202")
+def test_unexpectedly_passes():
+    assert True
+""",
+    )
+
+    assert statuses == {"test_unexpectedly_passes": "passed"}
