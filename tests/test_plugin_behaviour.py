@@ -348,6 +348,30 @@ def test_multiple_markers_no_message_matches_fails(jira_pytester):
     jira_pytester.runpytest().assert_outcomes(failed=1)
 
 
+def test_injected_xfail_marker_has_no_raises(jira_pytester):
+    # Regression guard for issue #3. The injected xfail marker must NOT carry a
+    # ``raises=`` kwarg: with it, pytest-check classifies soft-assertion failures
+    # by string-matching the rendered traceback (environment/xdist-dependent).
+    # The expected exception type is enforced by our runtime refiner instead.
+    #
+    # This guard is environment-independent: the test's own assertions pass, so
+    # with an open bug it is XPASS. If a regression re-introduced ``raises=``, the
+    # inner assertion would fail and the marker would turn it into XFAIL instead,
+    # making ``assert_outcomes(xpassed=1)`` fail.
+    jira_pytester.makepyfile(
+        """
+        from pytest_jira_xfail.annotations import bug
+
+        @bug("OPEN-1")
+        def test_it(request):
+            marker = request.node.get_closest_marker("xfail")
+            assert marker is not None
+            assert "raises" not in marker.kwargs, marker.kwargs
+        """
+    )
+    jira_pytester.runpytest().assert_outcomes(xpassed=1)
+
+
 def test_parametrized_test_with_open_issue(jira_pytester):
     jira_pytester.makepyfile(
         """
