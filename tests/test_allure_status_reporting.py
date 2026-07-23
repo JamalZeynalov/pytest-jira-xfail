@@ -62,19 +62,28 @@ def _ensure_package_importable(monkeypatch):
     )
 
 
-def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
+def _allure_results(pytester, test_body):
     pytester.makeconftest(_CONFTEST)
-    pytester.makepyfile(_TEST)
+    pytester.makepyfile(test_body)
 
     # Subprocess for a clean, single soft-assertion scope; allure enabled.
     pytester.runpytest_subprocess(
         "-p", "no:playwright", "--alluredir=allure-results"
     )
 
-    statuses = {}
+    results = {}
     for result_file in (pytester.path / "allure-results").glob("*-result.json"):
         data = json.loads(result_file.read_text())
-        statuses[data["name"]] = data["status"]
+        results[data["name"]] = data
+    return results
+
+
+def _allure_statuses(pytester, test_body):
+    return {name: data["status"] for name, data in _allure_results(pytester, test_body).items()}
+
+
+def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
+    statuses = _allure_statuses(pytester, _TEST)
 
     assert statuses == {
         # message contains "buildingCeilingHeight" -> expected bug -> XFAIL
@@ -82,3 +91,51 @@ def test_allure_status_matches_pytest_outcome_for_error_contains(pytester):
         # message contains neither substring -> different problem -> real failure
         "test_plugin[nothing to raise]": "failed",
     }
+
+
+def test_allure_status_is_passed_for_xpass(pytester):
+    # A test linked to an open bug that unexpectedly passes is an XPASS. Allure
+    # records XPASS as status "passed" (with an XPASS message), so it must not be
+    # reported as skipped/failed.
+    statuses = _allure_statuses(
+        pytester,
+        """
+from pytest_jira_xfail.annotations import bug
+
+
+@bug("AP-24202")
+def test_unexpectedly_passes():
+    assert True
+""",
+    )
+
+    assert statuses == {"test_unexpectedly_passes": "passed"}
+
+
+def test_allure_soft_xfail_shows_reason_message(pytester):
+    # A soft-assertion (pytest-check) failure that matches the bug is an XFAIL.
+    # pytest-check leaves call.excinfo=None for it, so allure would otherwise show
+    # no status message ("None"). The plugin synthesizes an excinfo so the
+    # "XFAIL ... open issues" reason (and the soft-failure detail) is rendered.
+    pytest.importorskip("pytest_check")
+
+    results = _allure_results(
+        pytester,
+        """
+import pytest_check as check
+from pytest_jira_xfail.annotations import bug
+
+
+@bug("AP-24202", error_contains=["buildingCeilingHeight"])
+def test_soft_xfail():
+    check.is_true(False, "missing buildingCeilingHeight in payload")
+""",
+    )
+
+    result = results["test_soft_xfail"]
+    assert result["status"] == "skipped"  # XFAIL
+
+    message = (result.get("statusDetails") or {}).get("message") or ""
+    assert "XFAIL" in message
+    assert "AP-24202" in message  # the open-issue reason is present
+    assert "buildingCeilingHeight" in message  # the actual soft-failure detail

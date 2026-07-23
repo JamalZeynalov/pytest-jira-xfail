@@ -120,6 +120,36 @@ def test_multiple_steps():
     result.assert_outcomes(xfailed=1)
 
 
+def test_soft_failure_matching_error_contains_is_xfail(pytester):
+    # error_contains must be enforced on pytest-check soft failures too: the
+    # failure message contains an expected substring -> XFAIL.
+    result = _run(
+        pytester,
+        open_keys={"AP-1"},
+        body="""
+@bug("AP-1", error_contains=["buildingCeilingHeight", "buildingClearHeightIn"])
+def test_soft_matches():
+    then_values_are_equal("buildingCeilingHeight", "other")
+""",
+    )
+    result.assert_outcomes(xfailed=1)
+
+
+def test_soft_failure_not_matching_error_contains_is_failure(pytester):
+    # The soft failure message contains neither substring -> a different problem,
+    # so it must surface as a real FAILURE, not a hidden XFAIL. (Reported bug.)
+    result = _run(
+        pytester,
+        open_keys={"AP-1"},
+        body="""
+@bug("AP-1", error_contains=["buildingCeilingHeight", "buildingClearHeightIn"])
+def test_soft_unrelated():
+    then_values_are_equal("tenantName", "other")
+""",
+    )
+    result.assert_outcomes(failed=1)
+
+
 def test_open_bug_all_steps_pass_is_xpass(pytester):
     # Bug is (apparently) fixed: all soft checks pass, so the still-linked test
     # surfaces as XPASS, prompting the team to remove the @bug marker.

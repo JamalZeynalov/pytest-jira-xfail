@@ -12,8 +12,12 @@ from types import SimpleNamespace
 from _pytest.skipping import xfailed_key
 from _pytest.stash import Stash
 
+import pytest_jira_xfail.xfail_plugin as xp
 from pytest_jira_xfail.xfail_plugin import (
     MATCHERS_ATTR,
+    _attach_soft_xfail_excinfo,
+    _matcher_accepts_soft,
+    _soft_failures_all_expected,
     _veto_xfail_if_error_unexpected,
 )
 
@@ -207,3 +211,148 @@ def test_error_contains_non_matching_param_cancels_xfail():
     )
 
     assert not _xfail_kept(item)
+
+
+# --------------------------------------------------------------------------- #
+# Soft-assertion (pytest-check) failures: error_contains enforced on the       #
+# collected failure messages (call.excinfo is None for soft failures).         #
+# --------------------------------------------------------------------------- #
+
+
+def test_soft_matcher_type_only_assertion_accepts_any_message():
+    assert _matcher_accepts_soft((AssertionError, None, True), "whatever") is True
+
+
+def test_soft_matcher_non_assertion_type_is_rejected():
+    # Soft failures are AssertionError based; a KeyError matcher cannot apply.
+    assert _matcher_accepts_soft((KeyError, None, True), "whatever") is False
+
+
+def test_soft_matcher_substring_match_and_case():
+    assert _matcher_accepts_soft((AssertionError, ["foo"], True), "a foo b") is True
+    assert _matcher_accepts_soft((AssertionError, ["foo"], True), "a bar b") is False
+    assert _matcher_accepts_soft((AssertionError, ["FOO"], False), "a foo b") is True
+
+
+def test_soft_all_expected_true_when_every_failure_matches():
+    matchers = [(AssertionError, ["foo"], True)]
+    assert _soft_failures_all_expected(["x foo", "y foo too"], matchers) is True
+
+
+def test_soft_all_expected_false_when_any_failure_unexpected():
+    matchers = [(AssertionError, ["foo"], True)]
+    assert _soft_failures_all_expected(["x foo", "y bar"], matchers) is False
+
+
+def test_veto_soft_failure_matching_keeps_xfail(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for buildingCeilingHeight"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))  # soft: no call-phase exc
+
+    assert _xfail_kept(item)
+
+
+def test_veto_soft_failure_not_matching_cancels_xfail(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for tenantName"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert not _xfail_kept(item)
+
+
+def test_veto_soft_failure_mixed_expected_and_unexpected_cancels(monkeypatch):
+    # One failure matches the bug, another is unrelated -> surface a real failure.
+    monkeypatch.setattr(
+        xp,
+        "_collect_soft_failures",
+        lambda: ["diff buildingCeilingHeight", "diff tenantName"],
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert not _xfail_kept(item)
+
+
+def test_veto_type_only_bug_keeps_xfail_for_soft_failure(monkeypatch):
+    # A bare @bug (no error_contains) keeps the deterministic XFAIL for any soft
+    # assertion, exactly as before.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: ["any soft failure"])
+    item = _item([(AssertionError, None, True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert _xfail_kept(item)
+
+
+def test_veto_no_soft_failures_keeps_xfail_for_xpass(monkeypatch):
+    # The test actually passed (no soft failures) -> XPASS; xfail must be retained.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: [])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    _veto_xfail_if_error_unexpected(item, _call(exc=None))
+
+    assert _xfail_kept(item)
+
+
+# --------------------------------------------------------------------------- #
+# Kept soft XFAILs must expose the reason to excinfo-based reporters (allure). #
+# pytest-check leaves call.excinfo=None for soft xfails, so we synthesize one. #
+# --------------------------------------------------------------------------- #
+
+
+def test_kept_soft_xfail_populates_call_excinfo(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for buildingCeilingHeight"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    # xfail retained AND reporters now have an exception to render.
+    assert _xfail_kept(item)
+    assert call.excinfo is not None
+    assert isinstance(call.excinfo.value, AssertionError)
+    assert "buildingCeilingHeight" in str(call.excinfo.value)
+
+
+def test_xpass_does_not_synthesize_excinfo(monkeypatch):
+    # No soft failures -> XPASS; we must not fabricate a failure for it.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: [])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    assert _xfail_kept(item)
+    assert call.excinfo is None
+
+
+def test_cancelled_soft_xfail_does_not_synthesize_excinfo(monkeypatch):
+    # Unexpected soft failure -> real failure; pytest-check itself sets excinfo,
+    # so we must leave call.excinfo alone (None here).
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: ["diff tenantName"])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    assert not _xfail_kept(item)
+    assert call.excinfo is None
+
+
+def test_attach_soft_xfail_excinfo_joins_all_failures():
+    call = _call(exc=None)
+    _attach_soft_xfail_excinfo(call, ["first failure", "second failure"])
+
+    assert call.excinfo is not None
+    message = str(call.excinfo.value)
+    assert "first failure" in message
+    assert "second failure" in message
+
+
+def test_attach_soft_xfail_excinfo_never_overwrites_existing():
+    original = SimpleNamespace(value=AssertionError("real"))
+    call = SimpleNamespace(when="call", excinfo=original)
+    _attach_soft_xfail_excinfo(call, ["ignored"])
+
+    assert call.excinfo is original

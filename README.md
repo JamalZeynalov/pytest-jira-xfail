@@ -122,8 +122,19 @@ Tests that fail via soft-assertion libraries such as
 [pytest-check](https://github.com/okken/pytest-check) (`check.equal(...)`,
 `@check.check_func`, ...) are handled correctly: a soft-assertion failure on a
 test with an open issue is reported as `XFAIL` deterministically, regardless of
-environment (IDE vs CI) or `pytest-xdist`. The expected exception type from
-`raises` is still enforced for hard (call-phase) exceptions.
+environment (IDE vs CI) or `pytest-xdist`.
+
+`error_contains` is enforced for soft-assertion failures too. The `XFAIL` is kept
+only when **every** collected soft failure message contains an expected substring;
+if any soft failure is unrelated to the bug, the test is reported as a real
+failure so the regression is not hidden. (A bare `@bug` with no `error_contains`
+keeps the deterministic `XFAIL` for any soft assertion.)
+
+The `XFAIL <reason>` message is also shown in Allure for soft-assertion skips. By
+default `pytest-check` reports a soft `XFAIL` without an exception object, so
+`allure-pytest` would otherwise render an empty status message; the plugin
+surfaces the open-issue reason (plus the soft-failure detail) without changing the
+`XFAIL` outcome.
 
 XFAIL message format:
 
