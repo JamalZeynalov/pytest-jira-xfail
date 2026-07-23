@@ -29,11 +29,5 @@ setup(
         "pytest-playwright>=0.3.3",
         "playwright>=1.43.0",
     ],
-    extras_require={
-        # Dependencies required only to run the test suite.
-        "test": [
-            "pytest-check>=2.8.0",
-        ],
-    },
     python_requires=">=3.9",
 )

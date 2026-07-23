@@ -35,40 +35,45 @@ class _ErrorContainsPlugin:
         # ``tryfirst`` makes this the outermost wrapper, so the code below runs
         # after pytest's own skipping plugin has already decided about xfail.
         report = yield
-
-        # No exception during the call phase (e.g. the test passed, was not run,
-        # or failed via a soft-assertion library that swallows the exception):
-        # leave the report untouched so the native xfail decision stands.
-        if call.when != "call" or call.excinfo is None:
-            return report
-
-        matchers = getattr(item, MATCHERS_ATTR, None)
-        if not matchers:
-            return report
-
-        # Only refine reports that were turned into an xfail because of the
-        # raised error. Anything else (real failure, xpass, NOTRUN) is left as is.
-        if getattr(report, "wasxfail", None) is None:
-            return report
-
-        error = call.excinfo.value
-        message = str(error)
-        for exc_type, substrings, case_sensitive in matchers:
-            if not isinstance(error, exc_type):
-                continue
-            if substrings is None or _message_contains(
-                message, substrings, case_sensitive
-            ):
-                # The raised error matches an open bug -> keep it as XFAIL.
-                return report
-
-        # The raised error does not match any expected type (or its message does
-        # not contain the expected substrings) -> this is a different problem,
-        # report it as a genuine failure so it is not silently hidden.
-        report.outcome = "failed"
-        if hasattr(report, "wasxfail"):
-            del report.wasxfail
+        _refine_report(item, call, report)
         return report
+
+
+def _refine_report(item, call, report):
+    """Downgrade an xfail back to a real failure when the raised error does not
+    match any expected type (or ``error_contains`` substring). Mutates ``report``
+    in place; a no-op for everything else.
+    """
+    # No exception during the call phase (e.g. the test passed, was not run, or
+    # failed via a soft-assertion library that swallows the exception): leave the
+    # report untouched so the native xfail decision stands.
+    if call.when != "call" or call.excinfo is None:
+        return
+
+    matchers = getattr(item, MATCHERS_ATTR, None)
+    if not matchers:
+        return
+
+    # Only refine reports that were turned into an xfail because of the raised
+    # error. Anything else (real failure, xpass, NOTRUN) is left as is.
+    if getattr(report, "wasxfail", None) is None:
+        return
+
+    error = call.excinfo.value
+    message = str(error)
+    for exc_type, substrings, case_sensitive in matchers:
+        if isinstance(error, exc_type) and (
+            substrings is None or _message_contains(message, substrings, case_sensitive)
+        ):
+            # The raised error matches an open bug -> keep it as XFAIL.
+            return
+
+    # The raised error does not match any expected type (or its message does not
+    # contain the expected substrings) -> this is a different problem, report it
+    # as a genuine failure so it is not silently hidden.
+    report.outcome = "failed"
+    if hasattr(report, "wasxfail"):
+        del report.wasxfail
 
 
 def _message_contains(message, substrings, case_sensitive):
