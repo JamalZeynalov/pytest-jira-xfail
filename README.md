@@ -95,8 +95,17 @@ def test_multiple_substrings():
     assert payload["user_id"]
 ```
 
+Matching is **case-insensitive by default**. Pass `case_sensitive=True` to
+require an exact-case match:
+
+```python
+@bug("MP-125", ValueError, error_contains="Invalid token", case_sensitive=True)
+def test_case_sensitive():
+    raise ValueError("invalid token")  # does NOT match -> reported as a failure
+```
+
 `error_contains` can be combined with `run=False` and with multiple `@bug`
-markers (each marker keeps its own expected type and substrings).
+markers (each marker keeps its own expected type, substrings and case option).
 
 XFAIL message format:
 

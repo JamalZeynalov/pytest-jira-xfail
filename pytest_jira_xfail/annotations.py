@@ -8,6 +8,7 @@ def bug(
     raises: type = AssertionError,
     run: bool = True,
     error_contains: Union[str, List[str]] = None,
+    case_sensitive: bool = False,
 ):
     """Use this annotation when you need to xfail entire test until the bug is fixed.
     Warning: Failed runs of a parametrized test will be marked with XFAIL and passed as XPASS.
@@ -29,14 +30,19 @@ def bug(
         and its message contains at least one of these substrings. If the type
         matches but the message does not, the test is reported as a real failure.
         Defaults to None, which matches on the error type only.
+    case_sensitive:
+        Whether the ``error_contains`` matching is case-sensitive.
+        Defaults to False (case-insensitive). Has no effect when
+        ``error_contains`` is None.
     """
     # Equivalent to allure.label("bug", issue_key, raises.__name__) but with extra
-    # "run" and "error_contains" kwargs that the plugin reads. Allure ignores
-    # unknown kwargs, so its reporting is unaffected.
+    # "run", "error_contains" and "case_sensitive" kwargs that the plugin reads.
+    # Allure ignores unknown kwargs, so its reporting is unaffected.
     return pytest.mark.allure_label(
         issue_key,
         raises.__name__,
         label_type="bug",
         run=run,
         error_contains=error_contains,
+        case_sensitive=case_sensitive,
     )

@@ -101,7 +101,7 @@ class PytestJiraHelper:
         for item in items:
             _add_allure_issue_labels(item)
             matchers = _get_bug_matchers(item)
-            exceptions: tuple = tuple(exc_type for exc_type, _ in matchers)
+            exceptions: tuple = tuple(exc_type for exc_type, _, _ in matchers)
             open_issues = []
             # The test is executed unless at least one open bug is marked run=False.
             run = True
@@ -126,7 +126,7 @@ class PytestJiraHelper:
 
                 # If any linked bug expects a specific error message, refine the
                 # native xfail with a runtime message check.
-                if any(substrings for _, substrings in matchers):
+                if any(substrings for _, substrings, _ in matchers):
                     setattr(item, MATCHERS_ATTR, matchers)
                     register_error_contains_plugin(item.session.config)
 
@@ -183,18 +183,19 @@ def _normalize_error_contains(value):
 def _get_bug_matchers(item):
     """Get the error matchers attached to the current test.
 
-    Returns a list of ``(exception_type, substrings_or_None)`` tuples, one per
-    @bug marker, where ``substrings`` is a list of expected message substrings
-    (or None when only the exception type should be matched).
+    Returns a list of ``(exception_type, substrings_or_None, case_sensitive)``
+    tuples, one per @bug marker, where ``substrings`` is a list of expected
+    message substrings (or None when only the exception type should be matched).
     """
     matchers = []
     for mark in _get_bug_markers(item):
         exc_type = eval(mark.args[1])
         substrings = _normalize_error_contains(mark.kwargs.get("error_contains"))
-        matchers.append((exc_type, substrings))
+        case_sensitive = mark.kwargs.get("case_sensitive", False)
+        matchers.append((exc_type, substrings, case_sensitive))
     return matchers
 
 
 def _get_expected_exception(item):
     """Get the expected exception type attached to the current test"""
-    return tuple(exc_type for exc_type, _ in _get_bug_matchers(item))
+    return tuple(exc_type for exc_type, _, _ in _get_bug_matchers(item))

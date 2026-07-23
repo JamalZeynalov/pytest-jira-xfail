@@ -40,9 +40,11 @@ class _ErrorContainsPlugin:
 
         error = call.excinfo.value
         message = str(error)
-        for exc_type, substrings in matchers:
-            if isinstance(error, exc_type) and (
-                substrings is None or any(sub in message for sub in substrings)
+        for exc_type, substrings, case_sensitive in matchers:
+            if not isinstance(error, exc_type):
+                continue
+            if substrings is None or _message_contains(
+                message, substrings, case_sensitive
             ):
                 # The raised error matches an open bug -> keep it as XFAIL.
                 return report
@@ -54,6 +56,14 @@ class _ErrorContainsPlugin:
         if hasattr(report, "wasxfail"):
             del report.wasxfail
         return report
+
+
+def _message_contains(message, substrings, case_sensitive):
+    """Return True if the message contains at least one of the substrings."""
+    if not case_sensitive:
+        message = message.lower()
+        substrings = [sub.lower() for sub in substrings]
+    return any(sub in message for sub in substrings)
 
 
 def register_error_contains_plugin(config):
