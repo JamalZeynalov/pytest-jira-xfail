@@ -37,6 +37,16 @@ Hard vs soft failures
   for any soft assertion, exactly as before. We match user-provided substrings
   against the failure *message* (stable across environments), never the exception
   type token -- so this does not reintroduce the issue #3 non-determinism.
+
+Surfacing the XFAIL reason for kept soft failures
+--------------------------------------------------------------------------------
+For a *kept* soft XFAIL, pytest-check leaves ``call.excinfo`` as ``None`` (it only
+sets ``report.wasxfail``). allure-pytest builds its ``XFAIL <reason>`` status
+message only when ``call.excinfo`` is set, so a soft XFAIL would otherwise show an
+empty Allure message. We therefore synthesize an ``ExceptionInfo`` from the soft
+failure messages so reporters can render the reason. This never changes the final
+outcome -- the marker has no ``raises=`` -- it only gives reporters something to
+show (see ``_attach_soft_xfail_excinfo``).
 """
 
 import pytest
@@ -91,8 +101,16 @@ def _veto_xfail_if_error_unexpected(item, call):
     # No hard exception: the test either passed (-> XPASS, leave it) or failed via
     # a soft-assertion library. Enforce ``error_contains`` on any soft failures.
     soft_failures = _collect_soft_failures()
-    if soft_failures and not _soft_failures_all_expected(soft_failures, matchers):
+    if not soft_failures:
+        # XPASS: allure renders the reason via its PASSED + wasxfail branch.
+        return
+    if not _soft_failures_all_expected(soft_failures, matchers):
         item.stash[xfailed_key] = None
+        return
+
+    # The soft failure(s) are the expected bug: keep the XFAIL but surface the
+    # reason to excinfo-based reporters (e.g. allure), which otherwise show nothing.
+    _attach_soft_xfail_excinfo(call, soft_failures)
 
 
 def _hard_error_is_expected(error, matchers):
@@ -131,6 +149,33 @@ def _matcher_accepts_soft(matcher, message):
     if substrings is None:
         return True
     return _message_contains(message, substrings, case_sensitive)
+
+
+def _attach_soft_xfail_excinfo(call, soft_failures):
+    """Populate ``call.excinfo`` for a *kept* soft-assertion XFAIL so excinfo-based
+    reporters can render the reason.
+
+    pytest-check swallows soft failures, so ``call.excinfo`` is ``None`` for a soft
+    XFAIL, and its own makereport sets ``report.wasxfail`` but not ``call.excinfo``.
+    allure-pytest only builds the ``XFAIL <reason>`` status message *inside*
+    ``if call.excinfo``; without an excinfo the Allure status message stays empty
+    (the user sees ``None``). We synthesize an ``ExceptionInfo`` from the collected
+    failure messages -- mirroring what pytest-check does for a *non*-xfail soft
+    failure -- so reporters show ``XFAIL <reason>`` plus the soft-failure details.
+
+    This does *not* change the final outcome. The injected marker carries no
+    ``raises=``, so both pytest-check and pytest-core still resolve the test to
+    XFAIL regardless of ``call.excinfo``; determinism (issue #3) is preserved.
+    Runs only in the outermost pre-yield, before any reporter reads the result.
+    """
+    if call.excinfo is not None:
+        return
+    try:
+        raise AssertionError("\n".join(soft_failures))
+    except AssertionError:
+        from _pytest._code.code import ExceptionInfo
+
+        call.excinfo = ExceptionInfo.from_current()
 
 
 def _collect_soft_failures():

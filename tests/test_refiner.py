@@ -15,6 +15,7 @@ from _pytest.stash import Stash
 import pytest_jira_xfail.xfail_plugin as xp
 from pytest_jira_xfail.xfail_plugin import (
     MATCHERS_ATTR,
+    _attach_soft_xfail_excinfo,
     _matcher_accepts_soft,
     _soft_failures_all_expected,
     _veto_xfail_if_error_unexpected,
@@ -293,3 +294,65 @@ def test_veto_no_soft_failures_keeps_xfail_for_xpass(monkeypatch):
     _veto_xfail_if_error_unexpected(item, _call(exc=None))
 
     assert _xfail_kept(item)
+
+
+# --------------------------------------------------------------------------- #
+# Kept soft XFAILs must expose the reason to excinfo-based reporters (allure). #
+# pytest-check leaves call.excinfo=None for soft xfails, so we synthesize one. #
+# --------------------------------------------------------------------------- #
+
+
+def test_kept_soft_xfail_populates_call_excinfo(monkeypatch):
+    monkeypatch.setattr(
+        xp, "_collect_soft_failures", lambda: ["differs for buildingCeilingHeight"]
+    )
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    # xfail retained AND reporters now have an exception to render.
+    assert _xfail_kept(item)
+    assert call.excinfo is not None
+    assert isinstance(call.excinfo.value, AssertionError)
+    assert "buildingCeilingHeight" in str(call.excinfo.value)
+
+
+def test_xpass_does_not_synthesize_excinfo(monkeypatch):
+    # No soft failures -> XPASS; we must not fabricate a failure for it.
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: [])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    assert _xfail_kept(item)
+    assert call.excinfo is None
+
+
+def test_cancelled_soft_xfail_does_not_synthesize_excinfo(monkeypatch):
+    # Unexpected soft failure -> real failure; pytest-check itself sets excinfo,
+    # so we must leave call.excinfo alone (None here).
+    monkeypatch.setattr(xp, "_collect_soft_failures", lambda: ["diff tenantName"])
+    item = _item([(AssertionError, ["buildingCeilingHeight"], True)])
+    call = _call(exc=None)
+    _veto_xfail_if_error_unexpected(item, call)
+
+    assert not _xfail_kept(item)
+    assert call.excinfo is None
+
+
+def test_attach_soft_xfail_excinfo_joins_all_failures():
+    call = _call(exc=None)
+    _attach_soft_xfail_excinfo(call, ["first failure", "second failure"])
+
+    assert call.excinfo is not None
+    message = str(call.excinfo.value)
+    assert "first failure" in message
+    assert "second failure" in message
+
+
+def test_attach_soft_xfail_excinfo_never_overwrites_existing():
+    original = SimpleNamespace(value=AssertionError("real"))
+    call = SimpleNamespace(when="call", excinfo=original)
+    _attach_soft_xfail_excinfo(call, ["ignored"])
+
+    assert call.excinfo is original
