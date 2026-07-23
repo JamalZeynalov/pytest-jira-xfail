@@ -8,7 +8,7 @@ def bug(
     raises: type = AssertionError,
     run: bool = True,
     error_contains: Union[str, List[str]] = None,
-    case_sensitive: bool = False,
+    case_sensitive: bool = True,
 ):
     """Use this annotation when you need to xfail entire test until the bug is fixed.
     Warning: Failed runs of a parametrized test will be marked with XFAIL and passed as XPASS.
@@ -32,8 +32,8 @@ def bug(
         Defaults to None, which matches on the error type only.
     case_sensitive:
         Whether the ``error_contains`` matching is case-sensitive.
-        Defaults to False (case-insensitive). Has no effect when
-        ``error_contains`` is None.
+        Defaults to True (case-sensitive). Set to False for case-insensitive
+        matching. Has no effect when ``error_contains`` is None.
     """
     # Equivalent to allure.label("bug", issue_key, raises.__name__) but with extra
     # "run", "error_contains" and "case_sensitive" kwargs that the plugin reads.

@@ -191,7 +191,7 @@ def _get_bug_matchers(item):
     for mark in _get_bug_markers(item):
         exc_type = eval(mark.args[1])
         substrings = _normalize_error_contains(mark.kwargs.get("error_contains"))
-        case_sensitive = mark.kwargs.get("case_sensitive", False)
+        case_sensitive = mark.kwargs.get("case_sensitive", True)
         matchers.append((exc_type, substrings, case_sensitive))
     return matchers
 

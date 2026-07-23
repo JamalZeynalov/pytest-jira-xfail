@@ -95,13 +95,20 @@ def test_multiple_substrings():
     assert payload["user_id"]
 ```
 
-Matching is **case-insensitive by default**. Pass `case_sensitive=True` to
-require an exact-case match:
+Matching is **case-sensitive by default**. Pass `case_sensitive=False` for
+case-insensitive matching:
 
 ```python
-@bug("MP-125", ValueError, error_contains="Invalid token", case_sensitive=True)
+# Case-sensitive (default): the case must match exactly
+@bug("MP-125", ValueError, error_contains="Invalid token")
 def test_case_sensitive():
     raise ValueError("invalid token")  # does NOT match -> reported as a failure
+
+
+# Case-insensitive: matches regardless of case
+@bug("MP-126", ValueError, error_contains="invalid token", case_sensitive=False)
+def test_case_insensitive():
+    raise ValueError("INVALID TOKEN")  # matches -> XFAIL
 ```
 
 `error_contains` can be combined with `run=False` and with multiple `@bug`
