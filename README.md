@@ -116,6 +116,15 @@ def test_case_insensitive():
 `error_contains` can be combined with `run=False` and with multiple `@bug`
 markers (each marker keeps its own expected type, substrings and case option).
 
+### Soft assertions (pytest-check)
+
+Tests that fail via soft-assertion libraries such as
+[pytest-check](https://github.com/okken/pytest-check) (`check.equal(...)`,
+`@check.check_func`, ...) are handled correctly: a soft-assertion failure on a
+test with an open issue is reported as `XFAIL` deterministically, regardless of
+environment (IDE vs CI) or `pytest-xdist`. The expected exception type from
+`raises` is still enforced for hard (call-phase) exceptions.
+
 XFAIL message format:
 
 ```

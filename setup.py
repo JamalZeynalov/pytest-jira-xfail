@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pytest-jira-xfail",
-    version="1.4.0",
+    version="1.4.1",
     author="Jamal Zeinalov",
     author_email="jamal.zeynalov@gmail.com",
     description="Plugin skips (xfail) tests if unresolved Jira issue(s) linked",
@@ -29,5 +29,12 @@ setup(
         "pytest-playwright>=0.3.3",
         "playwright>=1.43.0",
     ],
+    extras_require={
+        # Dependencies required only to run the test suite (the pytest-check
+        # soft-assertion regression tests, see tests/test_pytest_check_*.py).
+        "test": [
+            "pytest-check>=2.8.0",
+        ],
+    },
     python_requires=">=3.9",
 )
