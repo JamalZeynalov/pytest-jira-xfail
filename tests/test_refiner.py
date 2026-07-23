@@ -96,6 +96,35 @@ def test_subclass_of_expected_type_keeps_xfail():
     assert report.outcome == "skipped"
 
 
+# --- Default @bug("KEY") behaviour (raises=AssertionError), as used in prod --- #
+
+
+def test_default_assertion_error_keeps_xfail():
+    # A bare @bug("KEY") tracks a hard-assertion failure -> stays XFAIL.
+    report = _xfail_report()
+    _refine_report(
+        _item([(AssertionError, None, True)]),
+        _call(exc=AssertionError("assert 404 == 200")),
+        report,
+    )
+
+    assert report.outcome == "skipped"
+
+
+def test_non_assertion_crash_is_not_hidden_by_default_bug():
+    # An unrelated crash (not an AssertionError) must surface as a real failure,
+    # not be swallowed by the open bug's xfail.
+    report = _xfail_report()
+    _refine_report(
+        _item([(AssertionError, None, True)]),
+        _call(exc=ConnectionError("service unreachable")),
+        report,
+    )
+
+    assert report.outcome == "failed"
+    assert not hasattr(report, "wasxfail")
+
+
 # --------------------------------------------------------------------------- #
 # Message (error_contains) matching                                           #
 # --------------------------------------------------------------------------- #

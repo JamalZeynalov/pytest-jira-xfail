@@ -133,6 +133,42 @@ def test_mixed_open_and_resolved_still_injects_xfail():
     assert len(_xfail_markers(item)) == 1
 
 
+def test_real_world_usage_bare_bug_among_stacked_decorators():
+    """Mirrors production usage: a bare ``@bug("KEY")`` (all defaults) stacked
+    among many allure/pytest decorators, with plain hard assertions.
+
+    See compstak/QA-Tests-API
+    tests/property_service/test_get_property_comp_set.py::
+    test_exchange_user_tries_to_retrieve_comp_set_with_nonexistent_property_id.
+
+    The surrounding allure labels (as_id, reviewer, owner, ...) and plain pytest
+    marks must be ignored; only the single @bug drives the xfail, defaulting to
+    AssertionError with no ``raises`` kwarg on the injected marker.
+    """
+    markers = [
+        Mark(name="allure_label", args=("5175",), kwargs={"label_type": "as_id"}),
+        _bug("AP-6086"),  # <-- the only bug marker; all defaults
+        Mark(name="property_service", args=(), kwargs={}),
+        Mark(name="readonly", args=(), kwargs={}),
+        Mark(name="negative", args=(), kwargs={}),
+        Mark(
+            name="allure_label",
+            args=("jamal", "Liza"),
+            kwargs={"label_type": "reviewer"},
+        ),
+        Mark(name="allure_label", args=("Mina",), kwargs={"label_type": "owner"}),
+    ]
+    item = _FakeItem(markers)
+    _helper({"AP-6086"}).process_linked_jira_issues([item])
+
+    xfails = _xfail_markers(item)
+    assert len(xfails) == 1
+    assert "raises" not in xfails[0].kwargs
+    assert "AP-6086" in xfails[0].kwargs["reason"]
+    assert getattr(item, MATCHERS_ATTR) == [(AssertionError, None, True)]
+    assert any(m.name == "issue" for m in item.added_markers)
+
+
 # --------------------------------------------------------------------------- #
 # Resolved issue -> nothing injected                                          #
 # --------------------------------------------------------------------------- #
