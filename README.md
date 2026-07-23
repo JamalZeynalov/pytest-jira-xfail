@@ -1,5 +1,7 @@
 # pytest-jira-xfail
 
+[![Tests](https://github.com/JamalZeynalov/pytest-jira-xfail/actions/workflows/tests.yml/badge.svg)](https://github.com/JamalZeynalov/pytest-jira-xfail/actions/workflows/tests.yml)
+
 Plugin skips (xfail) tests linked to unresolved Jira issue(s)
 
 ## 1. Generate your Jira API token
