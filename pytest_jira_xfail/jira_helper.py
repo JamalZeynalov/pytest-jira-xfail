@@ -101,7 +101,6 @@ class PytestJiraHelper:
         for item in items:
             _add_allure_issue_labels(item)
             matchers = _get_bug_matchers(item)
-            exceptions: tuple = tuple(exc_type for exc_type, _, _ in matchers)
             open_issues = []
             # The test is executed unless at least one open bug is marked run=False.
             run = True
@@ -118,17 +117,20 @@ class PytestJiraHelper:
                     f"The test is skipped because of open issues:\n{links}\n"
                 )
 
-                mark = pytest.mark.xfail(
-                    reason=xfail_message, raises=exceptions, run=run
-                )
+                # NOTE: we deliberately do NOT pass ``raises=`` here. Doing so
+                # makes pytest-check classify soft-assertion failures by string
+                # matching the rendered traceback for the exception name, which is
+                # environment/xdist-dependent and thus non-deterministic (see
+                # issue #3). Instead the expected exception type is enforced by our
+                # own runtime refiner via real ``isinstance`` checks.
+                mark = pytest.mark.xfail(reason=xfail_message, run=run)
                 item.add_marker(mark)
                 item.add_marker(pytest.mark.issue)
 
-                # If any linked bug expects a specific error message, refine the
-                # native xfail with a runtime message check.
-                if any(substrings for _, substrings, _ in matchers):
-                    setattr(item, MATCHERS_ATTR, matchers)
-                    register_error_contains_plugin(item.session.config)
+                # Always enforce the expected exception type(s) (and any
+                # ``error_contains`` substrings) in the runtime refiner.
+                setattr(item, MATCHERS_ATTR, matchers)
+                register_error_contains_plugin(item.session.config)
 
     @staticmethod
     def get_all_linked_issues(items) -> List[str]:
@@ -194,8 +196,3 @@ def _get_bug_matchers(item):
         case_sensitive = mark.kwargs.get("case_sensitive", True)
         matchers.append((exc_type, substrings, case_sensitive))
     return matchers
-
-
-def _get_expected_exception(item):
-    """Get the expected exception type attached to the current test"""
-    return tuple(exc_type for exc_type, _, _ in _get_bug_matchers(item))

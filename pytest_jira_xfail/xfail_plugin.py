@@ -1,10 +1,19 @@
-"""Runtime helpers that refine the native ``xfail`` behaviour of the plugin.
+"""Runtime refiner that enforces the ``@bug`` expectations on the injected xfail.
 
-pytest's built-in ``xfail(raises=...)`` matches on the *type* of the raised
-exception only. To support the ``@bug(..., error_contains=...)`` option we need
-to additionally inspect the raised exception *message* at run time and, when it
-does not contain any of the expected substrings, report the test as a real
-failure instead of an expected one.
+The plugin injects a plain ``pytest.mark.xfail(reason=..., run=...)`` on tests
+linked to open Jira issues -- deliberately *without* a ``raises=`` argument (see
+issue #3: ``raises=`` makes pytest-check classify soft-assertion failures by
+string-matching the rendered traceback, which is environment/xdist-dependent).
+
+Because there is no ``raises=`` on the marker, pytest turns *any* raised error
+into an xfail. This runtime hook re-checks the real exception against the
+expected type(s) -- and any ``error_contains`` substrings -- using genuine
+``isinstance`` / substring checks, and downgrades the report back to a real
+failure when nothing matches.
+
+For soft-assertion failures (e.g. pytest-check) there is no exception during the
+``call`` phase, so ``call.excinfo`` is ``None`` and the report is left exactly as
+whichever plugin produced it -- giving deterministic XFAIL in every environment.
 """
 
 import pytest
@@ -12,13 +21,14 @@ import pytest
 _PLUGIN_NAME = "pytest_jira_xfail_error_contains"
 
 # Attribute set on an item (during collection) holding the list of
-# (exception_type, substrings_or_None) matchers derived from its open @bug marks.
+# (exception_type, substrings_or_None, case_sensitive) matchers derived from its
+# @bug markers.
 MATCHERS_ATTR = "_jira_xfail_matchers"
 
 
 class _ErrorContainsPlugin:
-    """Downgrades an ``xfail`` back to a failure when the error message
-    does not contain any of the expected substrings."""
+    """Downgrades an ``xfail`` back to a failure when the raised error does not
+    match any expected type (and, when given, any expected message substring)."""
 
     @pytest.hookimpl(wrapper=True, tryfirst=True)
     def pytest_runtest_makereport(self, item, call):
@@ -26,6 +36,9 @@ class _ErrorContainsPlugin:
         # after pytest's own skipping plugin has already decided about xfail.
         report = yield
 
+        # No exception during the call phase (e.g. the test passed, was not run,
+        # or failed via a soft-assertion library that swallows the exception):
+        # leave the report untouched so the native xfail decision stands.
         if call.when != "call" or call.excinfo is None:
             return report
 
@@ -49,9 +62,9 @@ class _ErrorContainsPlugin:
                 # The raised error matches an open bug -> keep it as XFAIL.
                 return report
 
-        # The error type may match, but its message does not contain any of the
-        # expected substrings -> this is a different problem, report it as a
-        # genuine failure so it is not silently hidden.
+        # The raised error does not match any expected type (or its message does
+        # not contain the expected substrings) -> this is a different problem,
+        # report it as a genuine failure so it is not silently hidden.
         report.outcome = "failed"
         if hasattr(report, "wasxfail"):
             del report.wasxfail
