@@ -68,6 +68,36 @@ def test_not_executed_until_fixed():
 
 Once the linked issue is resolved, the test runs normally again.
 
+### Match the error message, not only the error type
+
+By default a test is treated as `XFAIL` whenever it raises the expected error
+**type** (`raises`). If the same error type can be raised for unrelated reasons,
+use `error_contains` to xfail the test only when the raised error message
+contains an expected substring (or one of several substrings). If the type
+matches but the message does not, the test is reported as a **real failure** so a
+different problem is not silently hidden:
+
+```python
+from pytest_jira_xfail.annotations import bug
+
+
+# XFAIL only if an IndexError with this exact message is raised
+@bug("MP-123", IndexError, error_contains="list index out of range")
+def test_single_substring():
+    records = []
+    assert records[0]
+
+
+# XFAIL if a KeyError message contains any of the listed substrings
+@bug("MP-124", KeyError, error_contains=["'user_id'", "'account_id'"])
+def test_multiple_substrings():
+    payload = {}
+    assert payload["user_id"]
+```
+
+`error_contains` can be combined with `run=False` and with multiple `@bug`
+markers (each marker keeps its own expected type and substrings).
+
 XFAIL message format:
 
 ```

@@ -7,6 +7,11 @@ from requests import *
 from selenium.common.exceptions import *
 from singleton_decorator import singleton
 
+from pytest_jira_xfail.xfail_plugin import (
+    MATCHERS_ATTR,
+    register_error_contains_plugin,
+)
+
 try:
     from playwright._impl._api_types import *
 except ImportError:
@@ -95,7 +100,8 @@ class PytestJiraHelper:
 
         for item in items:
             _add_allure_issue_labels(item)
-            exceptions: tuple = _get_expected_exception(item)
+            matchers = _get_bug_matchers(item)
+            exceptions: tuple = tuple(exc_type for exc_type, _ in matchers)
             open_issues = []
             # The test is executed unless at least one open bug is marked run=False.
             run = True
@@ -117,6 +123,12 @@ class PytestJiraHelper:
                 )
                 item.add_marker(mark)
                 item.add_marker(pytest.mark.issue)
+
+                # If any linked bug expects a specific error message, refine the
+                # native xfail with a runtime message check.
+                if any(substrings for _, substrings in matchers):
+                    setattr(item, MATCHERS_ATTR, matchers)
+                    register_error_contains_plugin(item.session.config)
 
     @staticmethod
     def get_all_linked_issues(items) -> List[str]:
@@ -159,7 +171,30 @@ def _add_allure_issue_labels(item):
     return issues_keys
 
 
+def _normalize_error_contains(value):
+    """Normalize the ``error_contains`` value to a list of substrings or None"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def _get_bug_matchers(item):
+    """Get the error matchers attached to the current test.
+
+    Returns a list of ``(exception_type, substrings_or_None)`` tuples, one per
+    @bug marker, where ``substrings`` is a list of expected message substrings
+    (or None when only the exception type should be matched).
+    """
+    matchers = []
+    for mark in _get_bug_markers(item):
+        exc_type = eval(mark.args[1])
+        substrings = _normalize_error_contains(mark.kwargs.get("error_contains"))
+        matchers.append((exc_type, substrings))
+    return matchers
+
+
 def _get_expected_exception(item):
     """Get the expected exception type attached to the current test"""
-    issues_labels = _get_bug_markers(item)
-    return tuple(eval(x.args[1]) for x in issues_labels)
+    return tuple(exc_type for exc_type, _ in _get_bug_matchers(item))
