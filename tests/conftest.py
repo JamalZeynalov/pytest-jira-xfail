@@ -31,4 +31,7 @@ def pytest_collection_modifyitems(items):
 def jira_pytester(pytester):
     """A ``pytester`` instance pre-configured with the stubbed Jira conftest."""
     pytester.makeconftest(JIRA_CONFTEST)
+    # Disable pytest-playwright in the nested session too: it wraps each test in
+    # a soft-assertion scope that we neither need nor want here.
+    pytester.makeini("[pytest]\naddopts = -p no:playwright\n")
     return pytester
